@@ -5,7 +5,7 @@ import os
 from datetime import datetime
 
 from td3.TD3 import TD3
-from td3.utils import ReplayBuffer, DynamicExperienceReplay
+from td3.utils import ReplayBuffer
 
 
 class TD3_Training_Gym:
@@ -39,7 +39,7 @@ class TD3_Training_Gym:
         print("---------------------------------------")
         return avg_reward
 
-    def start_training(self, env, render=False, load=False, der_activated=False):
+    def start_training(self, env, render=False, load=False):
         parser = argparse.ArgumentParser()
         parser.add_argument("--policy", default="TD3")  # Policy name (TD3, DDPG or OurDDPG)
         parser.add_argument("--env",
@@ -65,12 +65,6 @@ class TD3_Training_Gym:
         else:
             parser.add_argument("--load_model",
                                 default="")  # Model load file name, "" doesn't load, "default" uses file_name
-        if der_activated:
-            parser.add_argument("--load_replays",
-                                default="buffers")  # Loads pre-trained replays to replay into the buffer "" doesn't load, "..." loads from the specified folder name
-        else:
-            parser.add_argument("--load_replays",
-                                default="")  # Loads pre-trained replays to replay into the buffer "" doesn't load, "..." loads from the s
         parser.add_argument("--random_policy", default=False)  # Activate random policy
 
         args = parser.parse_args()
@@ -121,17 +115,9 @@ class TD3_Training_Gym:
 
         replay_buffer = ReplayBuffer(state_dim, action_dim)
         best_buffer = ReplayBuffer(state_dim, action_dim)
-        der_buffer = DynamicExperienceReplay(state_dim, action_dim)
-
-        if args.load_replays != "":
-            batch = der_buffer.load(args.load_replays, True)
-            if batch is not None:
-                policy.train(batch, args.batch_size)
-            else:
-                print("No buffer batch loaded")
 
         # Evaluate untrained policy
-        #evaluations = [self.eval_policy(policy, env, args.seed, render)]
+        evaluations = [self.eval_policy(policy, env, args.seed, render)]
 
         state, done = env.reset(), False
         episode_reward = 0
@@ -169,11 +155,6 @@ class TD3_Training_Gym:
             replay_buffer.add(state, action, next_state, reward, done_bool)
             best_buffer.add(state, action, next_state, reward, done_bool)
 
-            # Store buffer
-            if done:
-                der_buffer.add(best_buffer)
-                best_buffer = ReplayBuffer(state_dim, action_dim)
-
             state = next_state
             episode_reward += reward
 
@@ -196,12 +177,3 @@ class TD3_Training_Gym:
                 evaluations.append(self.eval_policy(policy, env, args.seed, render))
                 np.save(f"./results/{file_name}", evaluations)
                 if args.save_model: policy.save(f"./models/{file_name}")
-                if args.load_replays != "":
-                    batch = der_buffer.load(args.load_replays, True)
-                    if batch is not None:
-                        policy.train(batch, args.batch_size)
-                    else:
-                        print("No buffer batch loaded")
-
-            if (t + 1) % (args.max_env_episode_steps * 100) == 0:
-                der_buffer.save()

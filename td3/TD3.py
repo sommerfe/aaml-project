@@ -9,6 +9,9 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # Implementation of Twin Delayed Deep Deterministic Policy Gradients (TD3)
 # Paper: https://arxiv.org/abs/1802.09477
 
+# Parts are as well from a project I worked on found in this repository:
+# https://github.com/j-huthmacher/AlphaWorm
+
 class Actor(nn.Module):
     def __init__(self, state_dim, action_dim, max_action):
         super(Actor, self).__init__()
