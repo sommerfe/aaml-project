@@ -43,7 +43,7 @@ class TD3_Training_Gym:
         parser = argparse.ArgumentParser()
         parser.add_argument("--policy", default="TD3")  # Policy name (TD3, DDPG or OurDDPG)
         parser.add_argument("--env",
-                            default="AlphaWorm")  # OpenAI gym environment name (not used to start env in AlphaWorm)
+                            default="Pendulum")  # OpenAI gym environment name (not used to start env in AlphaWorm)
         parser.add_argument("--seed", default=0, type=int)  # Sets Gym, PyTorch and Numpy seeds
         parser.add_argument("--start_timesteps", default=1e6, type=int)  # Time steps initial random policy is used
         parser.add_argument("--eval_freq", default=5e3, type=int)  # How often (time steps) we evaluate
@@ -74,14 +74,11 @@ class TD3_Training_Gym:
         print(f"{datetime.now()} \t Policy: {args.policy}, Env: {args.env}, Seed: {args.seed}")
         print("---------------------------------------")
 
-        if not os.path.exists("./results"):
-            os.makedirs("./results")
+        if not os.path.exists("./td3/results"):
+            os.makedirs("./td3/results")
 
-        if args.save_model and not os.path.exists("./models"):
-            os.makedirs("./models")
-
-        if not os.path.exists("./buffers"):
-            os.makedirs("./buffers")
+        if args.save_model and not os.path.exists("./td3/models"):
+            os.makedirs("./td3/models")
 
         # Set seeds
         # env.seed(args.seed)
@@ -114,7 +111,6 @@ class TD3_Training_Gym:
             policy.load(f"./models/{policy_file}")
 
         replay_buffer = ReplayBuffer(state_dim, action_dim)
-        best_buffer = ReplayBuffer(state_dim, action_dim)
 
         # Evaluate untrained policy
         evaluations = [self.eval_policy(policy, env, args.seed, render)]
@@ -153,7 +149,6 @@ class TD3_Training_Gym:
 
             # Store data in replay buffer
             replay_buffer.add(state, action, next_state, reward, done_bool)
-            best_buffer.add(state, action, next_state, reward, done_bool)
 
             state = next_state
             episode_reward += reward
@@ -175,5 +170,5 @@ class TD3_Training_Gym:
             # Evaluate episode
             if (t + 1) % args.eval_freq == 0:
                 evaluations.append(self.eval_policy(policy, env, args.seed, render))
-                np.save(f"./results/{file_name}", evaluations)
-                if args.save_model: policy.save(f"./models/{file_name}")
+                np.save(f"./td3/results/{file_name}", evaluations)
+                if args.save_model: policy.save(f"./td3/models/{file_name}")
