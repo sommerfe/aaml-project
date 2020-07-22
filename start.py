@@ -10,11 +10,11 @@ except ImportError:
 
 def main():
     # Start TD3 Gym Training
-    #start_td3()
+    start_td3()
 
     # Start DQN Gym Training
 
-    start_dqn()
+    #start_dqn()
 
 def start_td3():
     env = gym.make("Pendulum-v0")
@@ -45,7 +45,7 @@ def start_dqn():
     params["epsilon_min"] = 0.0001
 
     training = DQNLearner(params)
-    training.start_training(env, render=True, load=False)
+    training.start_training(env, render=False, load=False)
     env.close()
 
 if __name__ == '__main__':

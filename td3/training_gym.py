@@ -3,7 +3,8 @@ import torch
 import argparse
 import os
 from datetime import datetime
-
+import neptune
+from env_variable import neptune_api_token
 from td3.TD3 import TD3
 from td3.utils import ReplayBuffer
 
@@ -39,7 +40,10 @@ class TD3_Training_Gym:
         print("---------------------------------------")
         return avg_reward
 
-    def start_training(self, env, render=False, load=False):
+    def start_training(self, env, render=False, load=False, experiment_name="td3"):
+        neptune.init('sommerfe/aaml-project', neptune_api_token)
+        neptune.create_experiment(experiment_name)
+
         parser = argparse.ArgumentParser()
         parser.add_argument("--policy", default="TD3")  # Policy name (TD3, DDPG or OurDDPG)
         parser.add_argument("--env",
@@ -161,6 +165,7 @@ class TD3_Training_Gym:
                 # +1 to account for 0 indexing. +0 on ep_timesteps since it will increment +1 even if done=True
                 print(
                     f"{datetime.now()} \t Total T: {t + 1} Episode Num: {episode_num + 1} Episode T: {episode_timesteps} Reward: {episode_reward}")
+                neptune.log_metric('episode_reward', episode_reward)
                 # Reset environment
                 state, done = env.reset(), False
                 episode_reward = 0
@@ -169,6 +174,8 @@ class TD3_Training_Gym:
 
             # Evaluate episode
             if (t + 1) % args.eval_freq == 0:
-                evaluations.append(self.eval_policy(policy, env, args.seed, render))
+                eval_reward = self.eval_policy(policy, env, args.seed, render)
+                evaluations.append(eval_reward)
+                neptune.log_metric('eval_reward', eval_reward)
                 np.save(f"./td3/results/{file_name}", evaluations)
                 if args.save_model: policy.save(f"./td3/models/{file_name}")

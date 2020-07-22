@@ -1,6 +1,8 @@
 import random
 import numpy as np
 import os
+import neptune
+from env_variable import neptune_api_token
 from dqn.agent import QLearner, epsilon_greedy
 from keras.models import Sequential
 from keras.layers import Dense
@@ -67,7 +69,10 @@ class DQNLearner(QLearner):
 
 
 
-    def start_training(self, env, render=False, load=False):
+    def start_training(self, env, render=False, load=False, experiment_name="dqn"):
+        neptune.init('sommerfe/aaml-project', neptune_api_token)
+        neptune.create_experiment(experiment_name)
+
         if not os.path.exists("./dqn/results"):
             os.makedirs("./dqn/results")
 
@@ -77,8 +82,11 @@ class DQNLearner(QLearner):
         file_name = "dqn_result"
         evaluations = []
         for i in range(self.training_episodes):
-            evaluations.append(self.episode(env, i, render))
-            np.save(f"./dqn/results/{file_name}", evaluations)
+            reward = self.episode(env, i, render)
+            evaluations.append(reward)
+            neptune.log_metric('reward', reward)
+
+        np.save(f"./dqn/results/{file_name}", evaluations)
 
     def episode(self, env, nr_episode=0, render=False):
         state = env.reset()
