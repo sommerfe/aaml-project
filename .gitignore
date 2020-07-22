@@ -1,4 +1,4 @@
 .idea
 results
 models
-td3/__pycache__
+__pycache__
