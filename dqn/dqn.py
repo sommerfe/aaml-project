@@ -7,7 +7,8 @@ from dqn.agent import QLearner, epsilon_greedy
 from keras.models import Sequential
 from keras.layers import Dense
 from keras import optimizers
-
+import time
+import psutil
 
 def build_model(input_dimension, output_dimension, learning_rate=0.001):
     model = Sequential()
@@ -51,7 +52,7 @@ class ReplayMemory:
 
 class DQNLearner(QLearner):
 
-    def __init__(self, params):
+    def __init__(self, params, experiment_name="dqn"):
         super(DQNLearner, self).__init__(params)
         self.nr_input_features = params["nr_input_features"]
         self.epsilon = 1
@@ -66,13 +67,12 @@ class DQNLearner(QLearner):
         self.target_net = build_model(self.nr_input_features, self.nr_actions, self.alpha)
         self.update_target_network()
         self.training_episodes = params["episodes"]
-
-
-
-    def start_training(self, env, render=False, load=False, experiment_name="dqn"):
         neptune.init('sommerfe/aaml-project', neptune_api_token)
-        neptune.create_experiment(experiment_name)
+        neptune.create_experiment(experiment_name, params=params)
 
+
+
+    def start_training(self, env, render=False, load=False):
         if not os.path.exists("./dqn/results"):
             os.makedirs("./dqn/results")
 
@@ -81,11 +81,21 @@ class DQNLearner(QLearner):
 
         file_name = "dqn_result"
         evaluations = []
+        neptune.log_text('cpu_count', str(psutil.cpu_count()))
+        neptune.log_text('count_non_logical', str(psutil.cpu_count(logical=False)))
+        tic_training = time.perf_counter()
         for i in range(self.training_episodes):
+            neptune.log_text('avg_cpu_load', str(psutil.getloadavg()))
+            neptune.log_text('cpu_percent', str(psutil.cpu_percent(interval=1, percpu=True)))
+            tic_episode = time.perf_counter()
             reward = self.episode(env, i, render)
+            toc_episode = time.perf_counter()
             evaluations.append(reward)
             neptune.log_metric('reward', reward)
+            neptune.log_metric('episode_duration', toc_episode - tic_episode)
 
+        toc_training = time.perf_counter()
+        neptune.log_metric('training_duration', toc_training - tic_training)
         np.save(f"./dqn/results/{file_name}", evaluations)
 
     def episode(self, env, nr_episode=0, render=False):

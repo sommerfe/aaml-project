@@ -7,7 +7,8 @@ import neptune
 from env_variable import neptune_api_token
 from td3.TD3 import TD3
 from td3.utils import ReplayBuffer
-
+import time
+import psutil
 
 class TD3_Training_Gym:
     # Runs policy for X episodes and returns average reward
@@ -42,7 +43,7 @@ class TD3_Training_Gym:
 
     def start_training(self, env, render=False, load=False, experiment_name="td3"):
         neptune.init('sommerfe/aaml-project', neptune_api_token)
-        neptune.create_experiment(experiment_name)
+
 
         parser = argparse.ArgumentParser()
         parser.add_argument("--policy", default="TD3")  # Policy name (TD3, DDPG or OurDDPG)
@@ -51,7 +52,7 @@ class TD3_Training_Gym:
         parser.add_argument("--seed", default=0, type=int)  # Sets Gym, PyTorch and Numpy seeds
         parser.add_argument("--start_timesteps", default=1e6, type=int)  # Time steps initial random policy is used
         parser.add_argument("--eval_freq", default=5e3, type=int)  # How often (time steps) we evaluate
-        parser.add_argument("--max_timesteps", default=1e9, type=int)  # Max time steps to run environment
+        parser.add_argument("--max_timesteps", default=5e6, type=int)  # Max time steps to run environment
         parser.add_argument("--max_env_episode_steps", default=1e3, type=int)  # Max env steps
         parser.add_argument("--expl_noise", default=0.1)  # Std of Gaussian exploration noise
         parser.add_argument("--random_policy_ratio",
@@ -110,6 +111,10 @@ class TD3_Training_Gym:
             kwargs["policy_freq"] = args.policy_freq
             policy = TD3(**kwargs)
 
+        neptune.create_experiment(experiment_name, params=kwargs)
+        neptune.log_text('cpu_count', str(psutil.cpu_count()))
+        neptune.log_text('count_non_logical', str(psutil.cpu_count(logical=False)))
+
         if args.load_model != "":
             policy_file = file_name if args.load_model == "default" else args.load_model
             policy.load(f"./models/{policy_file}")
@@ -124,25 +129,20 @@ class TD3_Training_Gym:
         episode_timesteps = 0
         episode_num = 0
 
+        tic_training = time.perf_counter()
         for t in range(int(args.max_timesteps)):
+            neptune.log_text('avg_cpu_load', str(psutil.getloadavg()))
+            neptune.log_text('cpu_percent', str(psutil.cpu_percent(interval=1, percpu=True)))
+            tic_episode = time.perf_counter()
             episode_timesteps += 1
-            if args.random_policy:
-                # Select action randomly or according to policy
-                if t % ((args.random_policy_ratio + 1) * args.start_timesteps) < args.start_timesteps:
-                    action = env.action_space.sample()
-                else:
-                    action = (
-                            policy.select_action(np.array(state))
-                            + np.random.normal(0, max_action * args.expl_noise, size=action_dim)
-                    ).clip(-max_action, max_action)
-            else:
-                #if t < args.start_timesteps:
-                #    action = env.action_space.sample()
-                #else:
-                action = (
-                        policy.select_action(np.array(state))
-                        + np.random.normal(0, max_action * args.expl_noise, size=action_dim)
-                ).clip(-max_action, max_action)
+
+            #if t < args.start_timesteps:
+            #    action = env.action_space.sample()
+            #else:
+            action = (
+                    policy.select_action(np.array(state))
+                    + np.random.normal(0, max_action * args.expl_noise, size=action_dim)
+            ).clip(-max_action, max_action)
 
             # Perform action
             next_state, reward, done, _ = env.step(action)
@@ -179,3 +179,8 @@ class TD3_Training_Gym:
                 neptune.log_metric('eval_reward', eval_reward)
                 np.save(f"./td3/results/{file_name}", evaluations)
                 if args.save_model: policy.save(f"./td3/models/{file_name}")
+            toc_episode = time.perf_counter()
+            neptune.log_metric('episode_duration', toc_episode - tic_episode)
+
+        toc_training = time.perf_counter()
+        neptune.log_metric('training_duration', toc_training - tic_training)

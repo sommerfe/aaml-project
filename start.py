@@ -10,14 +10,15 @@ except ImportError:
 
 def main():
     # Start TD3 Gym Training
-    start_td3()
+    #start_td3()
 
     # Start DQN Gym Training
 
-    #start_dqn()
+    start_dqn()
 
 def start_td3():
-    env = gym.make("Pendulum-v0")
+    #env = gym.make("Pendulum-v0")
+    env = gym.make("MountainCarContinuous-v0")
 
     # Gym version with render
     training = TD3_Training_Gym()
@@ -25,7 +26,7 @@ def start_td3():
     env.close()
 
 def start_dqn():
-    env = gym.make("CartPole-v1")
+    env = gym.make("MountainCar-v0")
 
     params = {}
     params["nr_actions"] = env.action_space.n
@@ -35,7 +36,7 @@ def start_dqn():
     # Hyperparameters
     params["gamma"] = 0.99
     params["alpha"] = 0.001
-    params["episodes"] = 500
+    params["episodes"] = 5000
     params["epsilon"] = 0.1
     params["memory_capacity"] = 5000
     params["warmup_phase"] = 1000
