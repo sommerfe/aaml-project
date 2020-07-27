@@ -9,6 +9,7 @@ from keras.layers import Dense
 from keras import optimizers
 import time
 import psutil
+from multi_env import Process
 
 def build_model(input_dimension, output_dimension, learning_rate=0.001):
     model = Sequential()
@@ -83,17 +84,24 @@ class DQNLearner(QLearner):
         evaluations = []
         neptune.log_text('cpu_count', str(psutil.cpu_count()))
         neptune.log_text('count_non_logical', str(psutil.cpu_count(logical=False)))
+
+        l = []
+
         tic_training = time.perf_counter()
         for i in range(self.training_episodes):
             neptune.log_text('avg_cpu_load', str(psutil.getloadavg()))
             neptune.log_text('cpu_percent', str(psutil.cpu_percent(interval=1, percpu=True)))
             tic_episode = time.perf_counter()
+            #p = Process(target=self.episode, args=[env, i, render])
+            #p.start()
+            #l.append(p)
             reward = self.episode(env, i, render)
             toc_episode = time.perf_counter()
             evaluations.append(reward)
             neptune.log_metric('reward', reward)
             neptune.log_metric('episode_duration', toc_episode - tic_episode)
 
+        #[p.join() for p in l]
         toc_training = time.perf_counter()
         neptune.log_metric('training_duration', toc_training - tic_training)
         np.save(f"./dqn/results/{file_name}", evaluations)
