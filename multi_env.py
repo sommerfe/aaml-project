@@ -2,20 +2,22 @@ import time
 
 import gym
 import numpy as np
-
+import psutil
 from stable_baselines.common.policies import MlpPolicy
 from stable_baselines.common.vec_env import DummyVecEnv, SubprocVecEnv
 from stable_baselines.common import set_global_seeds
-from stable_baselines import ACKTR, PPO2, A2C, ACER
+from stable_baselines import ACKTR, PPO2, A2C
 import neptune
 from env_variable import neptune_api_token
+import random
 
 environments = ["MountainCar-v0", "MountainCarContinuous-v0", "FrozenLake8x8-v0", "HotterColder-v0"]
+environments2 = ["CartPole-v0", "CartPole-v1"]
 algorithms = ["ppo2", "a2c", "acktr"]
 multiprocessing = [True, False]
+parallel_environments = [2]
 cores = [2, 4, 6, 8]
 timesteps = 50000
-
 iterations = 100
 
 
@@ -67,12 +69,12 @@ def evaluate(model, num_steps=1000):
 
         # Compute mean reward
     mean_reward = round(np.mean(mean_rewards), 1)
-    print("Mean reward:", mean_reward, "Num episodes:", n_episodes)
+    #print("Mean reward:", mean_reward, "Num episodes:", n_episodes)
 
     return mean_reward
 
 def main():
-
+    neptune.init('sommerfe/aaml-project', neptune_api_token)
     for multi in multiprocessing:
         for envi in environments:
             for algo in algorithms:
@@ -84,15 +86,12 @@ def main():
                                   "algorithm": algo,
                                   "cores": n_core,
                                   "timesteps": timesteps}
-                        neptune.init('sommerfe/aaml-project', neptune_api_token)
                         neptune.create_experiment(experiment_name, params=params)
+                        neptune.log_text('cpu_count', str(psutil.cpu_count()))
+                        neptune.log_text('count_non_logical', str(psutil.cpu_count(logical=False)))
                         duration = []
                         for i in range(iterations):
-                            if multi:
-                                env = SubprocVecEnv([make_env(envi, i) for i in range(n_core)])
-                            else:
-                                env = DummyVecEnv([lambda: gym.make(envi)])
-
+                            env = SubprocVecEnv([make_env(envi, i) for i in range(n_core)])
                             if algo == "ppo2":
                                 model = PPO2(MlpPolicy, env, verbose=0)
                             elif algo == "acktr":
@@ -103,13 +102,15 @@ def main():
                             duration.append(training(model, timesteps))
                         neptune.log_text('duration_avg', str(sum(duration) / len(duration)))
                 else:
+                    env = DummyVecEnv([lambda: gym.make(envi)])
                     experiment_name = 'single_' + envi + '_' + algo
                     params = {"multi": multi,
                               "environment": envi,
                               "algorithm": algo,
                               "timesteps": timesteps}
-                    neptune.init('sommerfe/aaml-project', neptune_api_token)
                     neptune.create_experiment(experiment_name, params=params)
+                    neptune.log_text('cpu_count', str(psutil.cpu_count()))
+                    neptune.log_text('count_non_logical', str(psutil.cpu_count(logical=False)))
                     duration = []
                     for i in range(iterations):
                         if algo == "ppo2":
@@ -129,8 +130,7 @@ def training(model, n_timesteps=25000):
     model.learn(n_timesteps)
     total_time_multi = time.time() - start_time
 
-    print(
-        "Took {:.2f}s for multiprocessed version - {:.2f} FPS".format(total_time_multi, n_timesteps / total_time_multi))
+    #print("Took {:.2f}s for multiprocessed version - {:.2f} FPS".format(total_time_multi, n_timesteps / total_time_multi))
     neptune.log_metric('training_duration', total_time_multi)
     neptune.log_metric('training_fps', n_timesteps / total_time_multi)
     neptune.log_metric('reward', evaluate(model))
@@ -143,13 +143,66 @@ def training_single_core(model, n_timesteps=25000):
     model.learn(n_timesteps)
     total_time_single = time.time() - start_time
 
-    print("Took {:.2f}s for single process version - {:.2f} FPS".format(total_time_single,
-                                                                        n_timesteps / total_time_single))
+    #print("Took {:.2f}s for single process version - {:.2f} FPS".format(total_time_single, n_timesteps / total_time_single))
     neptune.log_metric('training_duration', total_time_single)
     neptune.log_metric('training_fps', n_timesteps / total_time_single)
     neptune.log_metric('reward', evaluate(model))
 
     return total_time_single
 
+
+
+def main2():
+    neptune.init('sommerfe/aaml-project', neptune_api_token)
+    for pe in parallel_environments:
+        for algo in algorithms:
+            experiment_name = 'pe_' + str(pe) + '_' + algo
+            params = {"parallel_environments": pe,
+                      "algorithm": algo,
+                      "timesteps": timesteps}
+            neptune.create_experiment(experiment_name, params=params)
+            neptune.log_text('cpu_count', str(psutil.cpu_count()))
+            neptune.log_text('count_non_logical', str(psutil.cpu_count(logical=False)))
+            duration = []
+            for i in range(iterations):
+                environment_list = random.sample(environments2, pe)
+                env = SubprocVecEnv([make_env(envi, i) for i, envi in enumerate(environment_list)])
+                if algo == "ppo2":
+                    model = PPO2(MlpPolicy, env, verbose=0)
+                elif algo == "acktr":
+                    model = ACKTR(MlpPolicy, env, verbose=0)
+                else:
+                    model = A2C(MlpPolicy, env, verbose=0)
+                duration.append(training(model, timesteps))
+            neptune.log_text('duration_avg', str(sum(duration) / len(duration)))
+
+
+def main3():
+    neptune.init('sommerfe/aaml-project', neptune_api_token)
+    for envi in environments2:
+        for algo in algorithms:
+            experiment_name = 'pe_single_' + envi + '_' + algo
+            params = {"environment": envi,
+                      "algorithm": algo,
+                      "timesteps": timesteps}
+            neptune.create_experiment(experiment_name, params=params)
+            neptune.log_text('cpu_count', str(psutil.cpu_count()))
+            neptune.log_text('count_non_logical', str(psutil.cpu_count(logical=False)))
+            duration = []
+            for i in range(iterations):
+                env = DummyVecEnv([lambda: gym.make(envi)])
+                if algo == "ppo2":
+                    model = PPO2(MlpPolicy, env, verbose=0)
+                elif algo == "acktr":
+                    model = ACKTR(MlpPolicy, env, verbose=0)
+                else:
+                    model = A2C(MlpPolicy, env, verbose=0)
+                training_single_core(model, timesteps)
+                duration.append(training(model, timesteps))
+            neptune.log_text('duration_avg', str(sum(duration) / len(duration)))
+
+
+
 if __name__ == '__main__':
-    main()
+    main2()
+    main3()
