@@ -3,13 +3,41 @@ import numpy as np
 import os
 import neptune
 from env_variable import neptune_api_token
-from dqn.agent import QLearner, epsilon_greedy
 from keras.models import Sequential
 from keras.layers import Dense
 from keras import optimizers
 import time
 import psutil
-from multi_env import Process
+from multiprocessing import Process
+
+class QLearner():
+
+    def __init__(self, params):
+        self.params = params
+        self.gamma = params["gamma"]
+        self.nr_actions = params["nr_actions"]
+        self.Q_values = {}
+        self.alpha = params["alpha"]
+        self.epsilon = params["epsilon"]
+        self.action_counts = np.zeros(self.nr_actions)
+
+    def Q(self, state):
+        if state not in self.Q_values:
+            self.Q_values[state] = np.zeros(self.nr_actions)
+        return self.Q_values
+
+    def policy(self, state):
+        return epsilon_greedy(self.Q_values, self.action_counts, epsilon=self.epsilon)
+
+    def update(self, state, action, reward, next_state):
+        pass
+
+def epsilon_greedy(Q_values, action_counts, epsilon=0.1):
+    if np.random.rand() <= epsilon:
+        return random.choice(range(len(Q_values)))
+    else:
+        return np.argmax(Q_values)
+
 
 def build_model(input_dimension, output_dimension, learning_rate=0.001):
     model = Sequential()
@@ -68,6 +96,7 @@ class DQNLearner(QLearner):
         self.target_net = build_model(self.nr_input_features, self.nr_actions, self.alpha)
         self.update_target_network()
         self.training_episodes = params["episodes"]
+        self.multi_processing = params["multi_processing"]
         neptune.init('sommerfe/aaml-project', neptune_api_token)
         neptune.create_experiment(experiment_name, params=params)
 
@@ -92,16 +121,18 @@ class DQNLearner(QLearner):
             neptune.log_text('avg_cpu_load', str(psutil.getloadavg()))
             neptune.log_text('cpu_percent', str(psutil.cpu_percent(interval=1, percpu=True)))
             tic_episode = time.perf_counter()
-            #p = Process(target=self.episode, args=[env, i, render])
-            #p.start()
-            #l.append(p)
-            reward = self.episode(env, i, render)
+            if self.multi_processing:
+                p = Process(target=self.episode, args=[env, i, render])
+                p.start()
+                l.append(p)
+            else:
+                reward = self.episode(env, i, render)
+                evaluations.append(reward)
+                neptune.log_metric('reward', reward)
             toc_episode = time.perf_counter()
-            evaluations.append(reward)
-            neptune.log_metric('reward', reward)
             neptune.log_metric('episode_duration', toc_episode - tic_episode)
-
-        #[p.join() for p in l]
+        if self.multi_processing:
+            [p.join() for p in l]
         toc_training = time.perf_counter()
         neptune.log_metric('training_duration', toc_training - tic_training)
         np.save(f"./dqn/results/{file_name}", evaluations)
