@@ -2,13 +2,18 @@ import random
 import numpy as np
 import os
 import neptune
-from env_variable import neptune_api_token
+from env_variable import neptune_api_token, neptune_project_name
 from keras.models import Sequential
 from keras.layers import Dense
 from keras import optimizers
 import time
 import psutil
 from multiprocessing import Process
+import gym
+
+'''
+Parts of the code has been used from the Praktikum Autonome Systeme at the Ludwig-Maximilians Universität.
+'''
 
 class QLearner():
 
@@ -74,12 +79,11 @@ class ReplayMemory:
 
 
 
-"""
- Autonomous agent using Deep Q-Learning.
-"""
-
 
 class DQNLearner(QLearner):
+    """
+     Autonomous agent using Deep Q-Learning.
+    """
 
     def __init__(self, params, experiment_name="dqn"):
         super(DQNLearner, self).__init__(params)
@@ -97,7 +101,7 @@ class DQNLearner(QLearner):
         self.update_target_network()
         self.training_episodes = params["episodes"]
         self.multi_processing = params["multi_processing"]
-        neptune.init('sommerfe/aaml-project', neptune_api_token)
+        neptune.init(neptune_project_name, neptune_api_token)
         neptune.create_experiment(experiment_name, params=params)
 
 
@@ -222,4 +226,32 @@ class DQNLearner(QLearner):
                 self.update_target_network()
         return loss
 
+
+def main():
+    env = gym.make("MountainCar-v0")
+
+    params = {}
+    params["nr_actions"] = env.action_space.n
+    params["nr_input_features"] = env.observation_space.shape[0]
+    params["env"] = env
+
+    # Hyperparameters
+    params["gamma"] = 0.99
+    params["alpha"] = 0.001
+    params["episodes"] = 50
+    params["epsilon"] = 0.1
+    params["memory_capacity"] = 5000
+    params["warmup_phase"] = 1000
+    params["target_update_interval"] = 1000
+    params["minibatch_size"] = 32
+    params["epsilon_linear_decay"] = 1.0 / params["memory_capacity"]
+    params["epsilon_min"] = 0.0001
+    params["multi_processing"] = True
+
+    training = DQNLearner(params, experiment_name='dqn_multi')
+    training.start_training(env, render=False, load=False)
+    env.close()
+
+if __name__ == '__main__':
+    main()
 
